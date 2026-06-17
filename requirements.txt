@@ -1,0 +1,8 @@
+fastapi==0.135.2
+uvicorn==0.42.0
+requests==2.33.1
+RPi.GPIO==0.7.1
+mfrc522==0.0.7
+spidev==3.8
+python-multipart==0.0.26
+Jinja2==3.1.6
