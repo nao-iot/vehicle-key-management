@@ -2,6 +2,9 @@ from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
+templates = Jinja2Templates(
+    directory="templates"
+)
 import sqlite3
 from datetime import datetime, timedelta
 import io
@@ -21,10 +24,10 @@ cursor = conn.cursor()
 # ==================================================
 # RFID状態（追加）
 # ==================================================
-last_rfid_user = None
-last_rfid_time = None
+#last_rfid_user = None
+#last_rfid_time = None
 # 自動判定候補（2026/05/10追加）
-pending_action = None
+#pending_action = None
 
 
 # ==================================================
@@ -369,50 +372,6 @@ def update_key_status(
     conn.commit()
 
 
-def update_pouch_status(
-    vehicle,
-    status
-):
-
-    cursor.execute("""
-    UPDATE items
-    SET pouch_status=?
-    WHERE vehicle_name=?
-    """, (
-        status,
-        vehicle
-    ))
-
-    conn.commit()
-
-
-def clear_user_if_returned(vehicle):
-
-    cursor.execute("""
-    SELECT key_status,
-           pouch_status
-    FROM items
-    WHERE vehicle_name=?
-    """, (vehicle,))
-
-    row = cursor.fetchone()
-
-    if (
-        row[0] == "available"
-        and
-        row[1] == "available"
-    ):
-
-        cursor.execute("""
-        UPDATE items
-        SET user_name='',
-            updated_at=''
-        WHERE vehicle_name=?
-        """, (vehicle,))
-
-        conn.commit()
-
-
 def insert_log(
     vehicle,
     user_name,
@@ -439,18 +398,6 @@ def insert_log(
 
     conn.commit()
 
-
-def get_all_sensors():
-
-    cursor.execute("""
-    SELECT sensor_name,
-           last_value,
-           updated_at
-    FROM sensor_status
-    ORDER BY sensor_name
-    """)
-
-    return cursor.fetchall()
 
 
 # 2026/05/28追加
@@ -519,17 +466,9 @@ def api_status():
     FROM items
     """)
     rows = cursor.fetchall()
-
-    cursor.execute("""
-    SELECT sensor_name, last_value, updated_at
-    FROM sensor_status
-    ORDER BY sensor_name
-    """)
-    sensors = cursor.fetchall()
-
+    
     return {
         "items": rows,
-        "sensors": sensors,
         "rfid_user":
             get_state("last_rfid_user")
             if is_rfid_valid()
@@ -541,11 +480,9 @@ def api_status():
 # ==================================================
 # メイン画面
 # ==================================================
-@app.get("/", response_class=HTMLResponse)
+@app.get("/old_dashboard", response_class=HTMLResponse)
 def dashboard(message: str = ""):
-    rows = get_all_items()
-
-    sensors = get_all_sensors()    
+    rows = get_all_items()  
     
     # ===== RFID表示（追加分(2026/05/03)）=====
     # ===== RFID表示 =====
@@ -667,36 +604,13 @@ def dashboard(message: str = ""):
         <button>車両利用履歴</button>
     </a>
     <a href="/download"><button>CSV</button></a>
+   
     <div class="message">{message}</div>
-
-    <div class="box">
-        <h3>センサー状態</h3>
-        <table>
-            <tr>
-                <th>センサー</th>
-                <th>値</th>
-                <th>更新時刻</th>
-            </tr>
-    """
-
-    for s in sensors:
-        html += f"""
-        <tr>
-            <td>{s[0]}</td>
-            <td>{s[1]}</td>
-            <td>{s[2]}</td>
-        </tr>
-        """
-
-    html += """
-        </table>
-    </div>
-
+    
     <table>
         <tr>
             <th>車両</th>
             <th>鍵</th>
-            <th>カード袋</th>
             <th>更新時刻</th>
             <th>操作</th>
         </tr>
@@ -707,9 +621,15 @@ def dashboard(message: str = ""):
         row_id = row[0]
         vehicle = row[1]
         key_status = row[2]
-        pouch_status = row[3]
+        # pouch_status = row[3]
         user_name = row[4]
-        updated_at = row[5]
+        
+        updated_at = ""
+        
+        if row[5]:
+            updated_at = row[5][:16]
+
+
 
         html += f"""
         <tr>
@@ -717,10 +637,6 @@ def dashboard(message: str = ""):
 
             <td id="key-{vehicle}" class="{key_status}">
                 {status_text(key_status, user_name)}
-            </td>
-
-            <td id="pouch-{vehicle}" class="{pouch_status}">
-                {status_text(pouch_status, user_name)}
             </td>
 
             <td id="time-{vehicle}">{updated_at}</td>
@@ -758,29 +674,7 @@ def dashboard(message: str = ""):
         html += f"""
         </div>
 
-        <hr>
-
-        <div id="pouch-action-{vehicle}">
-        """
-
-        # 袋
-        if pouch_status == "available":
-            html += f"""
-            <form action="/borrow_pouch/{row_id}" method="post">
-                <button type="submit">袋貸出</button>
-            </form>
-            """
-        else:
-            html += f"""
-            <form action="/return_pouch/{row_id}" method="post">
-                <button type="submit">袋返却</button>
-            </form>
-            """
-
-        html += """
-        </div>
-        """
-                
+        """                
         html += """
             </td>
         </tr>
@@ -838,9 +732,12 @@ def dashboard(message: str = ""):
             const vehicle = item[1];
     
             const keyStatus = item[2];
-            const pouchStatus = item[3];
             const userName = item[4];
-            const updatedAt = item[5];
+            let updatedAt = "";
+            
+            if (item[5]) {
+                updatedAt = item[5].substring(0, 16);
+            }
     
             // 鍵
             const keyCell =
@@ -913,25 +810,8 @@ def dashboard(message: str = ""):
                 `;
 
             }
-    
-            // 袋
-            const pouchCell =
-                document.getElementById(
-                    "pouch-" + vehicle
-                );
-    
-            pouchCell.className = pouchStatus;
-    
-            if (pouchStatus == "available") {
-    
-                pouchCell.innerText = "使用可能";
-    
-            } else {
-    
-                pouchCell.innerText =
-                    "(" + userName + ") 使用中";
-            }
-    
+        
+                
             // 時刻
             document.getElementById(
                 "time-" + vehicle
@@ -961,8 +841,6 @@ def borrow_key(item_id: int, user_name: str = Form(...)):
     row = get_item_by_id(item_id)
     
     vehicle = row[1]
-    now = now_str()
-
     
     borrow_key_logic(
         vehicle,
@@ -987,7 +865,6 @@ def return_key(item_id: int):
     row = cursor.fetchone()
 
     vehicle = row[0]
-    pouch_status = row[1]
 
     return_key_logic(
         vehicle,
@@ -998,79 +875,6 @@ def return_key(item_id: int):
 
     return RedirectResponse("/", status_code=303)
 
-
-@app.post("/borrow_pouch/{item_id}")
-def borrow_pouch(item_id: int):
-
-    cursor.execute("""
-    SELECT vehicle_name, user_name
-    FROM items
-    WHERE id=?
-    """, (item_id,))
-    row = cursor.fetchone()
-
-    vehicle = row[0]
-    user_name = row[1]
-
-    if user_name == "":
-        return dashboard("先に鍵を貸出してください")
-
-    cursor.execute("""
-    UPDATE items
-    SET pouch_status='using'
-    WHERE id=?
-    """, (item_id,))
-
-    cursor.execute("""
-    INSERT INTO logs (
-        vehicle_name,user_name,action,item_type,action_time
-    )
-    VALUES (?, ?, ?, ?, ?)
-    """, (vehicle, user_name, "貸出", "カード袋", now_str()))
-
-    conn.commit()
-
-    return RedirectResponse("/", status_code=303)
-
-
-@app.post("/return_pouch/{item_id}")
-def return_pouch(item_id: int):
-
-    cursor.execute("""
-    SELECT vehicle_name, key_status
-    FROM items
-    WHERE id=?
-    """, (item_id,))
-    row = cursor.fetchone()
-
-    vehicle = row[0]
-    key_status = row[1]
-
-    if key_status == "available":
-        cursor.execute("""
-        UPDATE items
-        SET pouch_status='available',
-            user_name='',
-            updated_at=''
-        WHERE id=?
-        """, (item_id,))
-    else:
-        cursor.execute("""
-        UPDATE items
-        SET pouch_status='available'
-        WHERE id=?
-        """, (item_id,))
-
-    cursor.execute("""
-    INSERT INTO logs (
-        vehicle_name,user_name,action,item_type,action_time
-    )
-    VALUES (?, ?, ?, ?, ?)
-    """, (vehicle, "", "返却", "カード袋", now_str()))
-
-    conn.commit()
-
-    return RedirectResponse("/", status_code=303)
 
 # ==================================================
 # センサーAPI
@@ -1166,8 +970,6 @@ def rfid_borrow(item_id: int):
     row = get_item_by_id(item_id)
 
     vehicle = row[1]
-    
-    now = now_str()
 
     borrow_key_logic(
         vehicle,
@@ -1231,7 +1033,6 @@ def key_attached(hook_id: str):
             "error": f"unknown hook : {hook_id}"
         }
 
-    now = now_str()
 
     # DB更新＆履歴
     return_key_logic(
@@ -1251,8 +1052,6 @@ def key_attached(hook_id: str):
 
 @app.post("/sensor/keyhook/removed/{hook_id}")
 def keyhook_removed(hook_id: str):
-
-    get_state("last_rfid_user")
 
     update_sensor(
         hook_id,
@@ -1440,7 +1239,6 @@ def history(date: str = "", vehicle: str = "全体"):
             <th>操作</th>
             <th>種別</th>
             <th>時刻</th>
-            <th>編集</th>
         </tr>
     """
 
@@ -1459,11 +1257,6 @@ def history(date: str = "", vehicle: str = "全体"):
             <td>{row[3]}</td>
             <td>{row[4]}</td>
             <td>{action_time}</td>
-            <td>
-                <a href="/edit_log/{row[0]}">
-                    <button>編集</button>
-                </a>
-            </td>
         </tr>
         """
 
@@ -1894,81 +1687,6 @@ def update_usage(
     )
 
 
-# 2026/05/31追加　貸出者編集
-@app.get("/edit_log/{log_id}",
-         response_class=HTMLResponse)
-def edit_log(log_id: int):
-
-    cursor.execute("""
-    SELECT *
-    FROM logs
-    WHERE id=?
-    """, (log_id,))
-
-    row = cursor.fetchone()
-
-    html = f"""
-    <html>
-    <body>
-
-    <h2>履歴修正</h2>
-
-    <form action="/update_log/{log_id}"
-          method="post">
-
-        使用者：
-
-        <input
-            type="text"
-            name="user_name"
-            value="{row[2]}"
-        >
-
-        <br><br>
-
-        <button type="submit">
-            保存
-        </button>
-
-    </form>
-
-    <br>
-
-    <a href="/history">
-        戻る
-    </a>
-
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(html)
-
-
-# 2026/05/31　追加
-@app.post("/update_log/{log_id}")
-def update_log(
-    log_id: int,
-    user_name: str = Form(...)
-):
-
-    cursor.execute("""
-    UPDATE logs
-    SET user_name=?
-    WHERE id=?
-    """, (
-        user_name,
-        log_id
-    ))
-
-    conn.commit()
-
-    return RedirectResponse(
-        "/history",
-        status_code=303
-    )
-
-
 # ==================================================
 # CSV出力
 # ==================================================
@@ -2003,5 +1721,48 @@ def download():
         }
     )
 
+@app.get("/dashboard_jinja")
+def dashboard_jinja(request: Request):
 
+    rfid_user = get_state("last_rfid_user")
 
+    if rfid_user and is_rfid_valid():
+        auth_text = f"認証中：{rfid_user}"
+    else:
+        auth_text = "未認証"
+
+    pending_action = get_pending_action()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={
+            "title": "鍵箱管理システム",
+            "rows": get_all_items(),
+            "auth_text": auth_text,
+            "pending_action": pending_action
+        }
+    )
+
+@app.get("/")
+def dashboard(request: Request):
+
+    rfid_user = get_state("last_rfid_user")
+
+    if rfid_user and is_rfid_valid():
+        auth_text = f"認証中：{rfid_user}"
+    else:
+        auth_text = "未認証"
+
+    pending_action = get_pending_action()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={
+            "title": "鍵箱管理システム",
+            "rows": get_all_items(),
+            "auth_text": auth_text,
+            "pending_action": pending_action
+        }
+    )

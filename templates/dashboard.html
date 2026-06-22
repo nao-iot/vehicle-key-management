@@ -3,14 +3,369 @@
 <html lang="ja">
 
 <head>
-<meta charset="UTF-8">
-<title>テスト</title>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+
+<style>
+    body {
+        font-family: Arial;
+        text-align: center;
+        background: #f5f5f5;
+    }
+
+    table {
+        margin: auto;
+        border-collapse: collapse;
+        width: 95%;
+        background: white;
+    }
+
+    th,
+    td {
+        border: 1px solid #ccc;
+        padding: 8px;
+    }
+
+    .available {
+        background: #ccffcc;
+    }
+
+    .using_authenticated {
+        background: #ffcccc;
+    }
+
+    .using_unauthenticated {
+        background: #fff0a0;
+    }
+
+    .message {
+        color: red;
+        font-weight: bold;
+        margin: 10px;
+    }
+
+    button {
+        padding: 6px 12px;
+        margin: 2px;
+        cursor: pointer;
+    }
+
+    input {
+        padding: 5px;
+        width: 110px;
+    }
+
+    .box {
+        width: 95%;
+        margin: auto;
+        background: white;
+        padding: 10px;
+        margin-bottom: 20px;
+        border: 1px solid #ccc;
+    }
+</style>
+
 </head>
 
 <body>
 
-<h1>Jinja2テスト成功</h1>
+<h1>{{ title }}</h1>
+<div class="box">
+    <b id="rfid-status">
+        {{ auth_text }}
+    </b>
+</div>
+
+<a href="/history">
+    <button>履歴</button>
+</a>
+
+<a href="/vehicle_history">
+    <button>車両利用履歴</button>
+</a>
+
+<a href="/download">
+    <button>CSV</button>
+</a>
+
+<br><br>
+
+<div id="pending-area">
+
+{% if pending_action %}
+
+<div class="box">
+
+    <h3>自動判定候補</h3>
+
+    <b>
+        {{ pending_action.user }}
+        →
+        {{ pending_action.vehicle }}
+        ({{ pending_action.action }})
+    </b>
+
+</div>
+
+{% endif %}
+
+</div>
+
+<table>
+
+    <tr>
+        <th>車両</th>
+        <th>鍵状態</th>
+        <th>更新時刻</th>
+        <th>操作</th>
+    </tr>
+
+    {% for row in rows %}
+
+    <tr>
+
+        <td>{{ row[1] }}</td>
+
+	<td id="key-{{ row[1] }}"
+	    class="{{ row[2] }}">
+	
+	    {% if row[2] == "available" %}
+	        使用可能
+	    {% elif row[2] == "using_authenticated" %}
+	        ({{ row[4] }}) 使用中
+	    {% else %}
+	        未認証貸出
+	    {% endif %}
+	
+	</td>
+
+	<td id="time-{{ row[1] }}">
+	    {{ row[5] }}
+	</td>
+
+        <td>
+	
+	<div id="key-action-{{ row[1] }}">
+
+            {% if row[2] == "available" %}
+
+                <form action="/borrow_key/{{ row[0] }}"
+                      method="post">
+
+                    <input type="text"
+                           name="user_name"
+                           placeholder="名前"
+                           required>
+
+                    <button type="submit">
+                        鍵貸出
+                    </button>
+
+                </form>
+
+            {% elif row[2] == "using_unauthenticated" %}
+
+                <form action="/start_auth/{{ row[1] }}"
+                      method="post">
+
+                    <button type="submit">
+                        認証する
+                    </button>
+
+                </form>
+
+            {% else %}
+
+                <form action="/return_key/{{ row[0] }}"
+                      method="post">
+
+                    <button type="submit">
+                        鍵返却
+                    </button>
+
+                </form>
+
+            {% endif %}
+
+        </div>
+	</td>
+
+    </tr>
+
+    {% endfor %}
+
+</table>
+
+<script>
+
+async function updateStatus() {
+
+    const response =
+        await fetch("/api/status");
+
+    const data =
+        await response.json();
+
+    // RFID状態
+
+    const rfid =
+        document.getElementById(
+            "rfid-status"
+        );
+
+    if (data.rfid_user) {
+
+        rfid.innerText =
+            "認証中：" +
+            data.rfid_user;
+
+    } else {
+
+        rfid.innerText =
+            "未認証";
+    }
+
+    // pending_action
+
+    const pendingArea =
+        document.getElementById(
+            "pending-area"
+        );
+
+    if (data.pending_action) {
+
+        pendingArea.innerHTML = `
+        <div class="box">
+
+            <h3>自動判定候補</h3>
+
+            <b>
+            ${data.pending_action.user}
+            →
+            ${data.pending_action.vehicle}
+            (${data.pending_action.action})
+            </b>
+
+        </div>
+        `;
+
+    } else {
+
+        pendingArea.innerHTML = "";
+    }
+
+	data.items.forEach(item => {
+	
+	    const vehicle = item[1];
+	
+	    const keyStatus = item[2];
+	
+	    const userName = item[4];
+	
+	    let updatedAt = "";
+	
+	    if (item[5]) {
+	        updatedAt = item[5].substring(0,16);
+	    }
+	
+	    const keyCell =
+	        document.getElementById(
+	            "key-" + vehicle
+	        );
+	
+	    const keyAction =
+	        document.getElementById(
+	            "key-action-" + vehicle
+	        );
+	
+	    if (!keyCell || !keyAction) {
+	        return;
+	    }
+	
+	    // 鍵状態
+	    if (keyStatus == "available") {
+	
+	        keyCell.className =
+	            "available";
+	
+	        keyCell.innerText =
+	            "使用可能";
+	
+	        keyAction.innerHTML = `
+	        <form action="/borrow_key/${item[0]}"
+	              method="post">
+	
+	            <input type="text"
+	                   name="user_name"
+	                   placeholder="名前"
+	                   required>
+	
+	            <button type="submit">
+	                鍵貸出
+	            </button>
+	
+	        </form>
+	        `;
+	
+	    }
+	    else if (
+	        keyStatus ==
+	        "using_authenticated"
+	    ) {
+	
+	        keyCell.className =
+	            "using_authenticated";
+	
+	        keyCell.innerText =
+	            "(" + userName + ") 使用中";
+	
+	        keyAction.innerHTML = `
+	        <form action="/return_key/${item[0]}"
+	              method="post">
+	
+	            <button type="submit">
+	                鍵返却
+	            </button>
+	
+	        </form>
+	        `;
+	
+	    }
+	    else {
+	
+	        keyCell.className =
+	            "using_unauthenticated";
+	
+	        keyCell.innerText =
+	            "未認証貸出";
+	
+	        keyAction.innerHTML = `
+	        <form action="/start_auth/${vehicle}"
+	              method="post">
+	
+	            <button type="submit">
+	                認証する
+	            </button>
+	
+	        </form>
+	        `;
+	    }
+	
+	    // 更新時刻
+	
+	    document.getElementById(
+	        "time-" + vehicle
+	    ).innerText = updatedAt;
+	
+	});
+
+}
+
+setInterval(updateStatus, 1000);
+
+</script>
 
 </body>
 
 </html>
+
