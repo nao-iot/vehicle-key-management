@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>貸出履歴</title>
+
+<style>
+    body {
+        font-family: Arial;
+        text-align: center;
+        background: #f5f5f5;
+    }
+
+    table {
+        margin: auto;
+        border-collapse: collapse;
+        width: 95%;
+        background: white;
+    }
+
+    th,
+    td {
+        border: 1px solid #ccc;
+        padding: 8px;
+    }
+</style>
+
+</head>
+
+<body>
+
+<h1>車両利用履歴</h1>
+
+<a href="/">
+    <button>戻る</button>
+</a>
+
+<br><br>
+
+<div>
+
+<a href="/vehicle_history?date={{ prev_date }}&vehicle={{ vehicle }}">
+    &lt;
+</a>
+
+<form action="/vehicle_history"
+      method="get"
+      style="display:inline;">
+
+    <input type="date"
+           name="date"
+           value="{{ target_date }}"
+           onchange="this.form.submit()">
+
+    <select name="vehicle"
+            onchange="this.form.submit()">
+
+        <option value="全体">
+            全体
+        </option>
+
+        {% for v in vehicles %}
+
+        <option value="{{ v[0] }}"
+            {% if vehicle == v[0] %}
+                selected
+            {% endif %}
+        >
+            {{ v[0] }}
+        </option>
+
+        {% endfor %}
+
+    </select>
+
+</form>
+
+<a href="/vehicle_history?date={{ next_date }}&vehicle={{ vehicle }}">
+    &gt;
+</a>
+
+</div>
+
+<br>
+
+<table>
+
+<tr>
+    <th>車両</th>
+    <th>使用者</th>
+    <th>貸出時刻</th>
+    <th>返却時刻</th>
+    <th>指示数</th>
+    <th>給油量</th>
+    <th>使用目的</th>
+    <th>編集</th>
+</tr>
+
+{% for row in rows %}
+
+<tr>
+
+<td>{{ row[1] }}</td>
+<td>{{ row[2] }}</td>
+
+<td>
+    {% if row[3] %}
+        {{ row[3][:16] }}
+    {% endif %}
+</td>
+
+<td>
+    {% if row[4] %}
+        {{ row[4][:16] }}
+    {% endif %}
+</td>
+
+<td>
+    {% if row[5] is not none %}
+        {{ row[5] }}
+    {% endif %}
+</td>
+
+<td>
+    {% if row[6] is not none %}
+        {{ row[6] }}
+    {% endif %}
+</td>
+
+<td>
+    {% if row[7] %}
+        {{ row[7] }}
+    {% endif %}
+</td>
+
+<td>
+    <a href="/edit_usage/{{ row[0] }}">
+        <button>編集</button>
+    </a>
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+</body>
+</html>
+

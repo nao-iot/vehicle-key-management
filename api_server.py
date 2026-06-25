@@ -26,7 +26,7 @@ cursor = conn.cursor()
 # ==================================================
 #last_rfid_user = None
 #last_rfid_time = None
-# 自動判定候補（2026/05/10追加）
+# 自動判定候補
 #pending_action = None
 
 
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS sensor_status (
 )
 """)
 
-# 2026/05/28追加
+
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS system_state (
     key TEXT PRIMARY KEY,
@@ -108,22 +108,6 @@ if count == 0:
 # ==================================================
 def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def status_text(status, user_name):
-
-    if status == "available":
-        return "使用可能"
-
-    elif status == "using_authenticated":
-        return f"({user_name}) 使用中"
-
-    elif status == "using_unauthenticated":
-        return "未認証貸出"
-
-    else:
-        return status
-
 
 def update_sensor(sensor_name, value):
 
@@ -173,7 +157,6 @@ def is_rfid_valid():
     ).total_seconds() < 10
 
 
-# 2026/06/07編集
 def borrow_key_logic(
     vehicle,
     user_name,
@@ -197,7 +180,7 @@ def borrow_key_logic(
         "鍵"
     )
 
-    # vehicle_usage作成
+    
     if action_name == "貸出":
         auth_type = "MANUAL"
 
@@ -220,7 +203,6 @@ def borrow_key_logic(
     )
 
 
-# 2026/06/07編集
 def return_key_logic(
     vehicle,
     action_name
@@ -248,7 +230,7 @@ def return_key_logic(
     )
 
 
-# 2026/06/07追加
+
 def create_vehicle_usage(
     vehicle_name,
     user_name,
@@ -273,7 +255,7 @@ def create_vehicle_usage(
     conn.commit()
 
 
-# 2026/06/07追加
+
 def finish_vehicle_usage(
     vehicle_name
 ):
@@ -298,7 +280,7 @@ def finish_vehicle_usage(
 
 
 # ==================================================
-# DB関数(2026/05/26追加)
+# DB関数
 # ==================================================
 
 def get_all_items():
@@ -332,7 +314,7 @@ def get_item_by_vehicle(vehicle):
 
     return cursor.fetchone()
 
-# 2026/05/30追加
+
 def get_vehicle_by_hook(hook_id):
 
     cursor.execute("""
@@ -400,7 +382,7 @@ def insert_log(
 
 
 
-# 2026/05/28追加
+
 def set_state(key, value):
 
     cursor.execute("""
@@ -417,7 +399,7 @@ def set_state(key, value):
     conn.commit()
 
 
-# 2026/05/28追加
+
 def get_state(key):
 
     cursor.execute("""
@@ -434,7 +416,7 @@ def get_state(key):
     return None
 
 
-# 2026/05/28追加
+
 def set_pending_action(data):
 
     set_state(
@@ -442,7 +424,7 @@ def set_pending_action(data):
         json.dumps(data)
     )
 
-# 2026/05/28追加
+
 def get_pending_action():
 
     value = get_state(
@@ -456,7 +438,7 @@ def get_pending_action():
 
 
 # ==================================================
-# 状態取得API（2026/05/24追加）
+# 状態取得API
 # ==================================================
 @app.get("/api/status")
 def api_status():
@@ -480,357 +462,29 @@ def api_status():
 # ==================================================
 # メイン画面
 # ==================================================
-@app.get("/old_dashboard", response_class=HTMLResponse)
-def dashboard(message: str = ""):
-    rows = get_all_items()  
-    
-    # ===== RFID表示（追加分(2026/05/03)）=====
-    # ===== RFID表示 =====
-    
-    rfid_user = get_state(
-        "last_rfid_user"
-    )   
+@app.get("/")
+def dashboard(request: Request):
+
+    rfid_user = get_state("last_rfid_user")
 
     if rfid_user and is_rfid_valid():
         auth_text = f"認証中：{rfid_user}"
     else:
         auth_text = "未認証"
 
-
-    # ===== 自動判定候補表示 =====
-    pending_html = ""
-
     pending_action = get_pending_action()
 
-    if pending_action:
-    
-        pending_html = f"""
-        <div class="box">
-            <h3>自動判定候補</h3>
-    
-            <b>
-            {pending_action["user"]}
-            →
-            {pending_action["vehicle"]}
-            ({pending_action["action"]})
-            </b>
-
-        </div>
-        """
-    html = f"""
-    <html lang="ja">    
-    <head>
-
-        <meta charset="UTF-8">
-
-        <meta name="google"
-              content="notranslate">
-
-        <title>鍵箱管理システム</title>
-
-        <style>
-            body {{
-                font-family: Arial;
-                text-align: center;
-                background: #f5f5f5;
-            }}
-
-            table {{
-                margin: auto;
-                border-collapse: collapse;
-                width: 95%;
-                background: white;
-            }}
-
-            th, td {{
-                border: 1px solid #ccc;
-                padding: 8px;
-            }}
-
-            .available {{
-                background: #ccffcc;
-            }}
-
-            .using_authenticated {{
-                background: #ffcccc;
-            }}
-
-            .using_unauthenticated {{
-                background: #fff0a0;
-            }}
-
-            .message {{
-                color: red;
-                font-weight: bold;
-                margin: 10px;
-            }}
-
-            button {{
-                padding: 6px 12px;
-                margin: 2px;
-                cursor: pointer;
-            }}
-
-            input {{
-                padding: 5px;
-                width: 110px;
-            }}
-
-            .box {{
-                width: 95%;
-                margin: auto;
-                background: white;
-                padding: 10px;
-                margin-bottom: 20px;
-                border: 1px solid #ccc;
-            }}
-        </style>
-    </head>
-
-    <body>
-
-    <h1>鍵箱管理システム</h1>
-
-    <div class="box">
-        <b id="rfid-status">{auth_text}</b>
-    </div>  
-
-    <div id="pending-area">
-        {pending_html}
-    </div>
-
-    <a href="/history"><button>履歴</button></a>
-    <a href="/vehicle_history">
-        <button>車両利用履歴</button>
-    </a>
-    <a href="/download"><button>CSV</button></a>
-   
-    <div class="message">{message}</div>
-    
-    <table>
-        <tr>
-            <th>車両</th>
-            <th>鍵</th>
-            <th>更新時刻</th>
-            <th>操作</th>
-        </tr>
-    """
-
-    for row in rows:
-
-        row_id = row[0]
-        vehicle = row[1]
-        key_status = row[2]
-        # pouch_status = row[3]
-        user_name = row[4]
-        
-        updated_at = ""
-        
-        if row[5]:
-            updated_at = row[5][:16]
-
-
-
-        html += f"""
-        <tr>
-            <td>{vehicle}</td>
-
-            <td id="key-{vehicle}" class="{key_status}">
-                {status_text(key_status, user_name)}
-            </td>
-
-            <td id="time-{vehicle}">{updated_at}</td>
-            
-            <td>
-
-            <div id="key-action-{vehicle}">
-        """
-
-        # 鍵(2026/05/03変更)
-        if key_status == "available":
-            html += f"""
-            <form action="/borrow_key/{row_id}" method="post">
-                <input type="text" name="user_name" placeholder="名前" required>
-                <button type="submit">鍵貸出</button>
-            </form>
-
-            """
-        elif key_status == "using_unauthenticated":
-            html += f"""
-            <form action="/start_auth/{vehicle}" method="post">
-                <button type="submit">
-                    認証する
-                </button>
-            </form>
-            """
-        else:
-            html += f"""
-            <form action="/return_key/{row_id}" method="post">
-                <button type="submit">鍵返却</button>
-            </form>
-
-            """
- 
-        html += f"""
-        </div>
-
-        """                
-        html += """
-            </td>
-        </tr>
-        """
-     
-    html += """
-
-    <script>
-    
-    async function updateStatus() {
-    
-        const response = await fetch("/api/status");
-        const data = await response.json();
-    
-        // RFID状態
-        const rfid = document.getElementById("rfid-status");
-    
-        if (data.rfid_user) {
-            rfid.innerText = "認証中：" + data.rfid_user;
-        } else {
-            rfid.innerText = "未認証";
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={
+            "title": "鍵箱管理システム",
+            "rows": get_all_items(),
+            "auth_text": auth_text,
+            "pending_action": pending_action
         }
-    
-        // pending_action
-        const pendingArea =
-            document.getElementById("pending-area");
-    
-        if (data.pending_action) {
-    
-            pendingArea.innerHTML = `
-            <div class="box">
-                <h3>自動判定候補</h3>
-    
-                <b>
-                ${data.pending_action.user}
-                →
-                ${data.pending_action.vehicle}
-                (${data.pending_action.action})
-                </b>
-            </div>
-            `;
-    
-        } else {
-    
-            pendingArea.innerHTML = "";
-        }
-    
-        window.lastKeyStatus =
-            window.lastKeyStatus || {};
-        window.lastState =
-            window.lastState || {};
-        // items更新
-        data.items.forEach(item => {
-    
-            const vehicle = item[1];
-    
-            const keyStatus = item[2];
-            const userName = item[4];
-            let updatedAt = "";
-            
-            if (item[5]) {
-                updatedAt = item[5].substring(0, 16);
-            }
-    
-            // 鍵
-            const keyCell =
-                document.getElementById("key-" + vehicle);
+    )
 
-            // 操作欄
-            const keyAction =
-                document.getElementById(
-                    "key-action-" + vehicle
-                );   
-
-            if (keyStatus == "available") {
-    
-                keyCell.className = "available";
-                keyCell.innerText = "使用可能";
-
-                keyAction.innerHTML = `
-                    <form action="/borrow_key/${item[0]}"
-                          method="post">
-                
-                        <input type="text"
-                               name="user_name"
-                               placeholder="名前"
-                               required>
-                
-                        <button type="submit">
-                            鍵貸出
-                        </button>
-                
-                    </form>
-                    `;
-    
-            } else if (
-                keyStatus == "using_authenticated"
-            ) {
-    
-                keyCell.className =
-                    "using_authenticated";
-    
-                keyCell.innerText =
-                    "(" + userName + ") 使用中";
-
-                keyAction.innerHTML = `
-                <form action="/return_key/${item[0]}"
-                      method="post">
-            
-                    <button type="submit">
-                        鍵返却
-                    </button>
-            
-                </form>
-                `;
-    
-            } else {
-    
-                keyCell.className =
-                    "using_unauthenticated";
-    
-                keyCell.innerText = "未認証貸出";
-
-                keyAction.innerHTML = `
-                <form action="/start_auth/${vehicle}"
-                      method="post">
-            
-                    <button type="submit">
-                        認証する
-                    </button>
-            
-                </form>
-                `;
-
-            }
-        
-                
-            // 時刻
-            document.getElementById(
-                "time-" + vehicle
-            ).innerText = updatedAt;
-
-                           
-        });
-
-    }
-    
-    // 1秒ごと更新
-    setInterval(updateStatus, 1000);
-    
-    </script>    
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(content=html)
 
 # ==================================================
 # 手動操作
@@ -880,7 +534,7 @@ def return_key(item_id: int):
 # センサーAPI
 # ==================================================
 
-# RFID読取 変更(2026/05/03)
+# RFID読取 
 @app.post("/sensor/rfid/{user_name}")
 def sensor_rfid(user_name: str):
 
@@ -931,7 +585,7 @@ def sensor_rfid(user_name: str):
             now
         ))
 
-        # 2026/06/07追加
+
         cursor.execute("""
         UPDATE vehicle_usage
         SET user_name=?,
@@ -960,7 +614,7 @@ def sensor_rfid(user_name: str):
     return {"result": "ok", "user": user_name}
 
 
-# 追加分(2026/05/03)
+
 @app.post("/rfid_borrow/{item_id}")
 def rfid_borrow(item_id: int):
 
@@ -982,7 +636,7 @@ def rfid_borrow(item_id: int):
 
     return RedirectResponse("/", status_code=303)
 
-# 追加分(2026/05/03)
+
 @app.post("/rfid_return/{item_id}")
 def rfid_return(item_id: int):
 
@@ -1017,7 +671,7 @@ def key_returned(vehicle: str):
     return {"result": "ok"}
 
 
-# リードスイッチ制御(2026/05/14追加)
+# リードスイッチ制御
 @app.post("/sensor/keyhook/attached/{hook_id}")
 def key_attached(hook_id: str):
 
@@ -1104,7 +758,7 @@ def keyhook_removed(hook_id: str):
 
     return {"result": "ok"}
 
-# 未認証登録の再認証（2026/05/24追加）
+# 未認証登録の再認証
 @app.post("/start_auth/{vehicle}")
 def start_auth(vehicle: str):
     set_state(
@@ -1116,8 +770,12 @@ def start_auth(vehicle: str):
 # ==================================================
 # 履歴画面
 # ==================================================
-@app.get("/history", response_class=HTMLResponse)
-def history(date: str = "", vehicle: str = "全体"):
+@app.get("/history")
+def history(
+    request: Request,
+    date: str = "",
+    vehicle: str = "全体"
+):
 
     if date == "":
         target_date = datetime.now().strftime("%Y-%m-%d")
@@ -1154,128 +812,28 @@ def history(date: str = "", vehicle: str = "全体"):
     """)
     
     vehicles = cursor.fetchall()
-    
-    vehicle_options = """
-    <option value="全体">
-    全体
-    </option>
-    """
-    for v in vehicles:
-    
-        name = v[0]
-    
-        selected = ""
-    
-        if vehicle == name:
-            selected = "selected"
-    
-        vehicle_options += f"""
-        <option value="{name}" {selected}>
-            {name}
-        </option>
-        """
-
-    html = f"""
-    <html>
-    <head>
-        <title>履歴</title>
-        <style>
-            body {{
-                font-family: Arial;
-                text-align: center;
-                background: #f5f5f5;
-            }}
-
-            table {{
-                margin: auto;
-                border-collapse: collapse;
-                width: 95%;
-                background: white;
-            }}
-
-            th, td {{
-                border: 1px solid #ccc;
-                padding: 8px;
-            }}
-        </style>
-    </head>
-
-    <body>
-
-    <h1>貸出履歴</h1>
-
-    <div>
-
-        <a href="/history?date={prev_date}&vehicle={vehicle}">&lt;</a>
-
-        <form action="/history" method="get" style="display:inline;">
-
-            <input type="date"
-                   name="date"
-                   value="{target_date}"
-                   onchange="this.form.submit()">
-
-            <select name="vehicle"
-                    onchange="this.form.submit()">
-
-            {vehicle_options}
-
-            </select>
-        </form>
-
-        <a href="/history?date={next_date}&vehicle={vehicle}">&gt;</a>
-
-    </div>
-
-    <br>
-
-    <a href="/"><button>戻る</button></a>
-
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>車両</th>
-            <th>使用者</th>
-            <th>操作</th>
-            <th>種別</th>
-            <th>時刻</th>
-        </tr>
-    """
-
-    for row in rows:
-        
-        action_time = ""
-        
-        if row[5]:
-            action_time = row[5][:16]
-
-        html += f"""
-        <tr>
-            <td>{row[0]}</td>
-            <td>{row[1]}</td>
-            <td>{row[2]}</td>
-            <td>{row[3]}</td>
-            <td>{row[4]}</td>
-            <td>{action_time}</td>
-        </tr>
-        """
-
-    html += """
-    </table>
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(content=html)
+       
+    return templates.TemplateResponse(
+        request=request,
+        name="history.html",
+        context={
+            "target_date": target_date,
+            "prev_date": prev_date,
+            "next_date": next_date,
+            "vehicle": vehicle,
+            "vehicles": vehicles,
+            "rows": rows
+        }
+    )
 
 
-# 2026/06/08追加
+
 @app.get(
-    "/vehicle_history",
-    response_class=HTMLResponse
+    "/vehicle_history"
 )
 
 def vehicle_history(
+    request: Request,
     date: str = "",
     vehicle: str = "全体"
 ):
@@ -1331,15 +889,14 @@ def vehicle_history(
         query,
         params
     )
-    
+   
     rows = cursor.fetchall()
-
 
     current_date = datetime.strptime(
         target_date,
         "%Y-%m-%d"
     )
-
+    
     prev_date = (
         current_date - timedelta(days=1)
     ).strftime("%Y-%m-%d")
@@ -1348,171 +905,29 @@ def vehicle_history(
         current_date + timedelta(days=1)
     ).strftime("%Y-%m-%d")
 
-    html = """
-    <html lang="ja">
-    <head>
-    
-    <meta charset="UTF-8">
-    
-    <meta name="google"
-          content="notranslate">
-
-        <title>車両利用履歴</title>
-
-        <style>
-
-        body {
-            font-family: Arial;
-            text-align: center;
-            background: #f5f5f5;
+    return templates.TemplateResponse(
+        request=request,
+        name="vehicle_history.html",
+        context={
+            "target_date": target_date,
+            "prev_date": prev_date,
+            "next_date": next_date,
+            "vehicle": vehicle,
+            "vehicles": vehicles,
+            "rows": rows
         }
-
-        table {
-            margin: auto;
-            border-collapse: collapse;
-            width: 95%;
-            background: white;
-        }
-
-        th, td {
-            border: 1px solid #ccc;
-            padding: 8px;
-        }
-
-        </style>
-    </head>
-
-    <body>
-
-    <h1>車両利用履歴</h1>
-
-    <a href="/">
-        <button>戻る</button>
-    </a>
-
-    <br><br>
-    """
-
-    html += f"""
-    <div>
-    
-        <a href="/vehicle_history?date={prev_date}&vehicle={vehicle}">
-            &lt;
-        </a>
-    
-        <form
-            action="/vehicle_history"
-            method="get"
-            style="display:inline;"
-        >
-    
-            <input
-                type="date"
-                name="date"
-                value="{target_date}"
-                onchange="this.form.submit()"
-            >
-    
-            <select
-                name="vehicle"
-                onchange="this.form.submit()"
-            >
-    
-                <option
-                    {"selected" if vehicle=="全体" else ""}
-                >
-                    全体
-                </option>
-    """
-
-    for v in vehicles:
-    
-        name = v[0]
-    
-        html += f"""
-            <option
-                {"selected" if vehicle==name else ""}
-            >
-                {name}
-            </option>
-        """
-    
-    html += f"""
-            </select>
-    
-        </form>
-    
-        <a href="/vehicle_history?date={next_date}&vehicle={vehicle}">
-            &gt;
-        </a>
-    
-    </div>
-    
-    <br>
-    """
-
-    html += """
-    <table>
-
-        <tr>
-            <th>車両</th>
-            <th>使用者</th>
-            <th>貸出時刻</th>
-            <th>返却時刻</th>
-            <th>指示数</th>
-            <th>給油量</th>
-            <th>使用目的</th>
-            <th>編集</th>
-        </tr>
-    """
-
-    for row in rows:
-
-        usage_id = row[0]
-
-        borrow_time = ""
-        
-        if row[3]:
-            borrow_time = row[3][:16]
-        
-        return_time = ""
-        
-        if row[4]:
-            return_time = row[4][:16]
-
-        html += f"""
-        <tr>
-            <td>{row[1]}</td>
-            <td>{row[2]}</td>
-            <td>{borrow_time}</td>
-            <td>{return_time}</td>            
-            <td>{row[5] if row[5] is not None else ""}</td>
-            <td>{row[6] if row[6] is not None else ""}</td>
-            <td>{row[7] if row[7] is not None else ""}</td>
-            <td>
-                <a href="/edit_usage/{usage_id}">
-                    <button>編集</button>
-                </a>
-            </td>
-        </tr>
-        """
-
-    html += """
-    </table>
-
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(html)
+    )
 
 
-# 2026/06/08追加
+
+
 @app.get(
-    "/edit_usage/{usage_id}",
-    response_class=HTMLResponse
+    "/edit_usage/{usage_id}"
 )
-def edit_usage(usage_id: int):
+def edit_usage(
+    request: Request,
+    usage_id: int
+):
 
     cursor.execute("""
     SELECT *
@@ -1530,114 +945,19 @@ def edit_usage(usage_id: int):
     
     vehicles = cursor.fetchall()
 
-
-    vehicle_options = ""
-    
-    for v in vehicles:
-    
-        name = v[0]
-    
-        selected = ""
-    
-        if name == row[1]:
-    
-            selected = "selected"
-    
-        vehicle_options += f"""
-        <option value="{name}" {selected}>
-            {name}
-        </option>
-        """
-
-    html = f"""
-    <html lang="ja">
-    
-    <head>
-    <meta charset="UTF-8">
-    <meta name="google"
-          content="notranslate">
-    </head>
-    
-    <body>
-
-    <h2>車両利用履歴編集</h2>
-
-    <form
-        action="/update_usage/{usage_id}"
-        method="post"
-    >
-
-        指示数<br>
-
-        <input
-            type="number"
-            name="meter_value"
-            value="{row[5] if row[5] else ''}"
-        >
-
-        <br><br>
-
-        給油量(L)<br>
-
-        <input
-            type="number"
-            step="0.1"
-            name="fuel_amount"
-            value="{row[6] if row[6] else ''}"
-        >
-
-        <br><br>
-        
-        車両<br>
-        
-        <select name="vehicle_name">
-        
-        {vehicle_options}
-        
-        </select>
-        
-        <br><br>
-
-        使用者<br>
-        
-        <input
-            type="text"
-            name="user_name"
-            value="{row[2] if row[2] else ''}"
-        >
-        
-        <br><br>
-
-        使用目的<br>
-
-        <input
-            type="text"
-            name="purpose"
-            value="{row[7] if row[7] else ''}"
-        >
-
-        <br><br>
-
-        <button type="submit">
-            保存
-        </button>
-
-    </form>
-
-    <br>
-
-    <a href="/vehicle_history">
-        戻る
-    </a>
-
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(html)
+    return templates.TemplateResponse(
+        request=request,
+        name="edit_usage.html",
+        context={
+            "usage_id": usage_id,
+            "row": row,
+            "vehicles": vehicles
+        }
+    )
 
 
-# 2026/06/08追加
+
+
 @app.post("/update_usage/{usage_id}")
 def update_usage(
 
@@ -1721,48 +1041,4 @@ def download():
         }
     )
 
-@app.get("/dashboard_jinja")
-def dashboard_jinja(request: Request):
 
-    rfid_user = get_state("last_rfid_user")
-
-    if rfid_user and is_rfid_valid():
-        auth_text = f"認証中：{rfid_user}"
-    else:
-        auth_text = "未認証"
-
-    pending_action = get_pending_action()
-
-    return templates.TemplateResponse(
-        request=request,
-        name="dashboard.html",
-        context={
-            "title": "鍵箱管理システム",
-            "rows": get_all_items(),
-            "auth_text": auth_text,
-            "pending_action": pending_action
-        }
-    )
-
-@app.get("/")
-def dashboard(request: Request):
-
-    rfid_user = get_state("last_rfid_user")
-
-    if rfid_user and is_rfid_valid():
-        auth_text = f"認証中：{rfid_user}"
-    else:
-        auth_text = "未認証"
-
-    pending_action = get_pending_action()
-
-    return templates.TemplateResponse(
-        request=request,
-        name="dashboard.html",
-        context={
-            "title": "鍵箱管理システム",
-            "rows": get_all_items(),
-            "auth_text": auth_text,
-            "pending_action": pending_action
-        }
-    )
