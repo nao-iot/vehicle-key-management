@@ -88,4 +88,10 @@ templates/dashboard.html : ダッシュボード画面
 * OCR入力
 * Docker対応
 
+## Development Story
 
+This project started as a personal project to improve vehicle key management operations.
+
+See the development story here.
+
+[Development Story](project_story.md)
