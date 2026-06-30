@@ -75,23 +75,17 @@ templates/dashboard.html : ダッシュボード画面
 
 ## Future Work
 
-### Version 1.1
-
-* 誤貸出防止(PENDING状態)
-* UI改善
-
-### Version 1.2
-
-* Jinja2化
-* コード分割
-
-### Version 1.5
-
+### Version 1.3
 * NFCタグ連携
-* スマホ入力フォーム
+* スマホ入力画面
+
+### Version 1.4
+* UI改善
+* 現場フィードバック反映
 
 ### Version 2.0
+* PENDING状態
+* OCR入力
+* Docker対応
 
-* 鍵ボックス連携
-* 電子錠連携
 
