@@ -1,5 +1,11 @@
 # Vehicle Key Management System
 
+> [!NOTE]
+> This repository contains the legacy VKM V1 implementation. Active successor
+> development continues in VKM2. See the
+> [VKM V1 to VKM2 handover](docs/VKM_V1_TO_VKM2_HANDOVER.md) for the verified
+> hardware baseline, validation results, and migration policy.
+
 ## Overview
 
 RFIDカードとリードスイッチを利用した車両鍵管理システムです。
